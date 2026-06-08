@@ -1,0 +1,10 @@
+__pycache__/
+coursera-env/
+venv/
+.env
+env/
+.DS_Store
+*.pdf
+*.json
+coursera_transcripts_checkpoint.json
+coursera_transcripts.pdf
