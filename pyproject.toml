@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coursera-scraper"
+version = "1.1.0"
+description = "Scrape Coursera course transcripts and compile them into a PDF"
+requires-python = ">=3.10"
+dependencies = [
+    "selenium>=4.6.0",
+    "reportlab",
+]
+
+[project.scripts]
+coursera-scraper = "cli:main"
+
+[tool.setuptools]
+py-modules = ["cli", "browser_manager", "session_manager", "transcript_extractor", "coursera_transcript_scraper"]

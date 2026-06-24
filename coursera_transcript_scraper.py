@@ -2,21 +2,14 @@
 Coursera Transcript Scraper & PDF Generator
 ============================================
 Requirements:
-    pip install selenium webdriver-manager reportlab
-
-Browser requirement:
-    Google Chrome must be installed on your system.
+    pip install selenium reportlab
 
 Usage:
-    python coursera_transcript_scraper.py
-
-The script will:
-    1. Ask for the course URL
-    2. Open a browser for you to manually log in
-    3. Scrape all module transcripts automatically
-    4. Save everything to a nicely formatted PDF
+    python coursera_transcript_scraper.py           # interactive
+    coursera-scraper scrape "machine-learning"      # CLI
 """
 
+import logging
 import os
 import sys
 import time
@@ -28,13 +21,10 @@ from datetime import datetime
 # Selenium Imports
 # ==============================================================================
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
-from webdriver_manager.chrome import ChromeDriverManager
 
 # ==============================================================================
 # ReportLab Imports
@@ -47,6 +37,7 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, PageBreak, HRFlowable
 )
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from browser_manager import BrowserManager, Browser
 
 
 # ==============================================================================
@@ -67,39 +58,44 @@ WAIT_TIMEOUT = 20
 # Browser Setup
 # ==============================================================================
 
-def build_driver() -> webdriver.Chrome:
-    options = Options()
-    options.page_load_strategy = 'eager'
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option("useAutomationExtension", False)
-    options.add_argument("--window-size=1280,900")
-    options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    )
-    service = Service(ChromeDriverManager().install())
-    driver  = webdriver.Chrome(service=service, options=options)
-    driver.execute_cdp_cmd(
-        "Page.addScriptToEvaluateOnNewDocument",
-        {"source": "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"}
-    )
-    return driver
-
-
 # ==============================================================================
 # Login
 # ==============================================================================
 
-def login(driver: webdriver.Chrome) -> bool:
-    print("\n[1/4] Waiting for manual login to Coursera...")
+def login(driver: webdriver.Chrome, headless: bool = False, session_mgr=None) -> bool:
+    print("\n[1/4] Checking authentication...")
+
+    # Profile-based: Chrome/Edge auto-persist cookies in --user-data-dir
+    if session_mgr and session_mgr.is_logged_in(driver):
+        print("  [Saved session] Already logged in — skipping manual login.")
+        return True
+
+    # Cookie fallback (Firefox, or if profile cookies were lost)
+    if session_mgr and session_mgr.cookies_path.exists():
+        if session_mgr.load_cookies(driver) and session_mgr.is_logged_in(driver):
+            print("  [Cookie restore] Session restored from cookies.")
+            session_mgr.save_session(driver)
+            return True
+
+    # Session was previously established but is now expired → tell user, exit
+    if session_mgr and session_mgr.session_info():
+        print("\n[Error] Session expired.")
+        print("Run: coursera-scraper login")
+        sys.exit(1)
+
+    # Manual login (first run or direct script usage)
     driver.get("https://www.coursera.org/login")
-    print("  Please log in using the opened browser window.")
-    input("  Press ENTER here in the terminal once you are logged in...")
-    print("  [Success] Logged in.")
+    if headless:
+        print("  Headless mode: skipping manual login prompt.")
+    else:
+        print("  Please log in using the opened browser window.")
+        input("  Press ENTER here in the terminal once you are logged in...")
+
+    if session_mgr:
+        session_mgr.save_session(driver)
+        print("  Session saved — future runs will skip this step.")
+
+    print("  [Success] Login complete.")
     return True
 
 
@@ -216,6 +212,9 @@ def _collect_links_on_page(driver: webdriver.Chrome, seen_urls: set, module_labe
                 if not label:
                     label = "Untitled"
 
+                if re.search(r"\breading\b", label, re.IGNORECASE):
+                    continue
+
                 seen_urls.add(href)
                 results.append({"week": module_label, "title": label, "url": href})
         except Exception:
@@ -299,10 +298,13 @@ def get_all_lecture_links(driver: webdriver.Chrome, course_url: str) -> list[dic
         for a in anchors:
             href = a.get_attribute("href") or ""
             if re.search(r"/learn/[^/]+/(lecture|item|supplement)/", href) and href not in seen_urls:
+                title = a.text.strip() or "Lecture"
+                if re.search(r"\breading\b", title, re.IGNORECASE):
+                    continue
                 seen_urls.add(href)
                 lectures.append({
                     "week": "Module",
-                    "title": a.text.strip() or "Lecture",
+                    "title": title,
                     "url": href
                 })
 
@@ -361,80 +363,11 @@ def _expand_all_sections(driver: webdriver.Chrome):
 # ==============================================================================
 
 def extract_transcript(driver: webdriver.Chrome, lecture: dict) -> str:
-    """Navigate to a lecture page and extract its transcript text."""
-    driver.get(lecture["url"])
-    time.sleep(1)
-
-    # 1) Look for transcript tab / panel
-    transcript_xpaths = [
-        "//button[contains(translate(text(),'TRANSCRIPT','transcript'),'transcript')]",
-        "//div[contains(@class,'Transcript')]",
-        "//*[@data-testid='transcript-panel']",
-        "//button[contains(@aria-controls,'transcript')]",
-    ]
-
-    # Try clicking a transcript tab if visible
-    for xpath in transcript_xpaths[:2]:
-        try:
-            btn = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, xpath))
-            )
-            driver.execute_script("arguments[0].click();", btn)
-            time.sleep(0.5)
-            break
-        except Exception:
-            pass
-
-    # 2) Extract text from transcript container
-    container_xpaths = [
-        "//div[contains(@class,'rc-TranscriptItem') or contains(@class,'transcript')]",
-        "//*[@data-testid='transcript']",
-        "//div[@role='region' and contains(@aria-label,'transcript')]",
-        "//div[contains(@class,'phrases')]",
-    ]
-
-    text_parts = []
-    for xpath in container_xpaths:
-        try:
-            elements = driver.find_elements(By.XPATH, xpath)
-            if elements:
-                text_parts = [el.text.strip() for el in elements if el.text.strip()]
-                if text_parts:
-                    break
-        except Exception:
-            pass
-
-    # 3) Fallback: download the .txt transcript file if button exists
-    if not text_parts:
-        try:
-            dl_btn = driver.find_element(
-                By.XPATH,
-                "//a[contains(@href,'.txt') and contains(translate(@href,'TRANSCRIPT','transcript'),'transcript')]"
-            )
-            import urllib.request, urllib.error
-            txt_url = dl_btn.get_attribute("href")
-            cookies = {c["name"]: c["value"] for c in driver.get_cookies()}
-            req = urllib.request.Request(txt_url)
-            for name, value in cookies.items():
-                req.add_header("Cookie", f"{name}={value}")
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                raw = resp.read().decode("utf-8", errors="replace")
-                # Strip SRT timestamps if present
-                raw = re.sub(r"\d+\n\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}\n", "", raw)
-                text_parts = [raw.strip()]
-        except Exception:
-            pass
-
-    # 4) Absolute fallback: grab all paragraph text on the page
-    if not text_parts:
-        try:
-            paras = driver.find_elements(By.TAG_NAME, "p")
-            text_parts = [p.text.strip() for p in paras if len(p.text.strip()) > 40]
-        except Exception:
-            pass
-
-    transcript = "\n".join(text_parts).strip()
-    return transcript if transcript else "(No transcript found for this lecture.)"
+    """Extract transcript. One-shot wrapper — prefer TranscriptExtractor for batch use."""
+    from transcript_extractor import TranscriptExtractor
+    ext = TranscriptExtractor(driver)
+    ext.setup()
+    return ext.extract(lecture)["transcript"]
 
 
 # ==============================================================================
@@ -574,13 +507,18 @@ def build_pdf(
 # Main
 # ==============================================================================
 
-def main():
+def main(
+    course_url: str | None = None,
+    browser: "Browser | None" = None,
+    headless: bool = False,
+) -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     print("=" * 60)
     print("  Coursera Transcript Scraper & PDF Generator")
     print("=" * 60)
 
-    # Gather configuration
-    course_url = DEFAULT_COURSE_URL or input(
+    # Gather configuration (interactive fallback for direct script use)
+    course_url = course_url or DEFAULT_COURSE_URL or input(
         "\nCourse URL (e.g. https://www.coursera.org/learn/machine-learning): "
     ).strip()
 
@@ -590,12 +528,30 @@ def main():
     course_slug  = get_course_slug(course_url)
     course_title = course_slug.replace("-", " ").title()
 
-    # Launch browser
-    driver = build_driver()
+    # Launch browser via BrowserManager
+    mgr = BrowserManager()
+    if browser is None:
+        browser = mgr.get_default_browser()
+        if browser is None:
+            print("\n[Error] No supported browser found. Install Chrome, Edge, Chromium, or Firefox.")
+            return
+        print(f"  Using browser: {browser.value}")
+
+    from session_manager import SessionManager
+    from transcript_extractor import TranscriptExtractor
+
+    session_mgr = SessionManager(browser.value)
+    driver = mgr.create_driver(
+        browser, headless=headless, profile_dir=session_mgr.profile_dir, optimize=True
+    )
+    extractor = TranscriptExtractor(driver)
 
     try:
         # Login
-        login(driver)
+        login(driver, headless=headless, session_mgr=session_mgr)
+
+        # Inject network interceptors after login, before lecture pages
+        extractor.setup()
 
         # Collect lectures
         lectures = get_all_lecture_links(driver, course_url)
@@ -611,7 +567,6 @@ def main():
             try:
                 with open(checkpoint_path, "r", encoding="utf-8") as f:
                     checkpoint_data = json.load(f)
-                # Only resume if same course
                 if checkpoint_data.get("course_slug") == course_slug:
                     enriched = checkpoint_data.get("lectures", [])
                     scraped_urls = {item.get("url", "") for item in enriched}
@@ -619,17 +574,33 @@ def main():
             except Exception:
                 pass
 
-        # Scrape transcripts
         remaining = [lec for lec in lectures if lec["url"] not in scraped_urls]
         total = len(lectures)
         done = total - len(remaining)
         print(f"\n[3/4] Scraping transcripts for {len(remaining)} remaining lecture(s) (of {total} total)...")
 
-        for i, lec in enumerate(remaining, done + 1):
-            print(f"  [{i}/{total}] {lec['title'][:60]}...", end=" ", flush=True)
-            transcript = extract_transcript(driver, lec)
+        # Attempt parallel API pre-fetch (fast path — no Selenium, no page loads)
+        api_results: list = extractor.extract_api_parallel(remaining)
+        api_hits = sum(1 for t in api_results if t)
+        if api_hits:
+            print(f"  [API] Pre-fetched {api_hits}/{len(remaining)} transcripts directly.")
+
+        for i, (lec, api_transcript) in enumerate(zip(remaining, api_results), done + 1):
+            print(f"  [{i}/{total}] {lec['title'][:55]}...", end=" ", flush=True)
+
+            if api_transcript:
+                transcript = api_transcript.strip()
+                strategy = "API"
+                # Cache the API result
+                extractor._cache.set(lec, transcript)
+            else:
+                result = extractor.extract(lec)
+                transcript = result["transcript"]
+                strategy = result["strategy"]
+
             word_count = len(transcript.split())
-            print(f"({word_count} words)")
+            print(f"({word_count} words) [{strategy}]")
+
             enriched.append({
                 "week":       lec["week"],
                 "title":      lec["title"],
@@ -637,7 +608,6 @@ def main():
                 "transcript": transcript,
             })
 
-            # Save checkpoint after each lecture
             with open(checkpoint_path, "w", encoding="utf-8") as f:
                 json.dump({
                     "course_slug": course_slug,
@@ -646,7 +616,9 @@ def main():
                     "lectures": enriched,
                 }, f, indent=2, ensure_ascii=False)
 
-            time.sleep(0.1)  # polite delay
+            time.sleep(0.1)
+
+        extractor.print_summary()
 
     finally:
         driver.quit()
