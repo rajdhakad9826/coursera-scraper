@@ -8,3 +8,15 @@ env/
 *.json
 coursera_transcripts_checkpoint.json
 coursera_transcripts.pdf
+
+# Persistent login profiles and cookie backups — never commit
+profiles/
+cookies.json
+debug/*.html
+debug/*.png
+debug
+
+.claude
+.cache
+.coursera_scraper.egg-info
+.serena

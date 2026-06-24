@@ -1,93 +1,150 @@
 # Coursera Transcript Scraper & PDF Generator
 
-This project automates the process of collecting transcripts from Coursera courses and compiling them into a clean, searchable PDF. It handles course navigation, transcript extraction, checkpointing, and PDF generation automatically.
-
-I originally built it for personal use because manually copying and pasting transcripts from individual lectures into AI tools for summaries and notes became repetitive and time-consuming. The scraper can process an entire course and generate a single PDF containing all available lecture transcripts and reading materials, making it much easier to review course content or use it as input for note-taking and AI-assisted study workflows.
+Scrapes all lecture transcripts from a Coursera course and compiles them into a single searchable PDF. Built for personal study workflows — review course content or feed it into AI note-taking tools.
 
 ## Prerequisites
 
-1. **Python 3.x**: Ensure you have Python installed.
-2. **Google Chrome**: Google Chrome must be installed on your system, as this script uses Selenium to drive it.
+- Python 3.10+
+- At least one of: **Chrome**, **Edge**, **Chromium**, or **Firefox**
+
+No manual driver downloads needed. Selenium 4.6+ manages drivers automatically.
 
 ## Installation
 
-1. **Clone the repository:**
+```bash
+git clone https://github.com/rajdhakad9826/coursera-scraper.git
+cd coursera-scraper
 
-   ```bash
-   git clone https://github.com/rajdhakad9826/coursera-scraper.git
-   cd coursera-scraper
-   ```
-2. **(Recommended) Create a virtual environment:**
+python3 -m venv coursera-env
+source coursera-env/bin/activate        # Windows: coursera-env\Scripts\activate
 
-   ```bash
-   # Linux/macOS
-   python3 -m venv coursera-env
+pip install -r requirements.txt
+pip install -e .                        # installs the coursera-scraper command
+```
 
-   # Windows
-   python -m venv coursera-env
-   ```
+## CLI Usage
 
-3. **Activate the virtual environment:**
+### Scrape a course
 
-   **Linux/macOS**
-   ```bash
-   source coursera-env/bin/activate
-   ```
-   **Windows (Command Prompt)**
-   ```cmd
-   coursera-env\Scripts\activate
-   ```
-   **Windows (PowerShell)**
-   ```powershell
-   .\coursera-env\Scripts\Activate.ps1
-   ```
+```bash
+# by course slug (URL: https://www.coursera.org/learn/machine-learning)
+coursera-scraper scrape "machine-learning"
 
-3. Install the required Python packages:
+# by full URL
+coursera-scraper scrape "https://www.coursera.org/learn/python"
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+# spaces in name are auto-slugified
+coursera-scraper scrape "machine learning"
+```
 
-## Usage
+### Choose a browser
 
-Run the script:
+```bash
+coursera-scraper scrape "python" --browser chrome
+coursera-scraper scrape "python" --browser firefox
+coursera-scraper scrape "python" --browser edge
+coursera-scraper scrape "python" --browser chromium
+```
 
+### Headless mode
+
+```bash
+coursera-scraper scrape "python" --headless
+```
+
+> **Note:** headless mode skips the manual login prompt. Only use this if your browser session is already authenticated (e.g. persistent profile with saved cookies).
+
+### List detected browsers
+
+```bash
+coursera-scraper browsers
+```
+
+Output:
+```
+Available browsers:
+
+  ✓ chrome
+  ✓ edge
+  ✗ firefox
+  ✓ chromium
+```
+
+### Version
+
+```bash
+coursera-scraper version
+```
+
+## Browser Auto-Detection
+
+When `--browser` is not specified, the scraper detects installed browsers and picks the best one automatically:
+
+**Priority:** Chrome → Edge → Chromium → Firefox
+
+```
+Detected browser: chrome
+```
+
+If the requested browser is not installed:
+```
+Error: requested browser firefox not found.
+
+Available browsers:
+  - chrome
+  - edge
+```
+
+If no browser is found:
+```
+No supported browser found.
+
+Install one of:
+  - chrome
+  - edge
+  - chromium
+  - firefox
+```
+
+## Login
+
+The scraper opens a browser window and navigates to the Coursera login page. Log in manually (handles 2FA, CAPTCHA, SSO), then press **ENTER** in the terminal. The scraper continues automatically from there.
+
+## Checkpoint / Resume
+
+After each lecture, progress is saved to `coursera_transcripts_checkpoint.json`. If interrupted, re-run the same command — already-scraped lectures are skipped automatically.
+
+## Output
+
+- `coursera_transcripts.pdf` — formatted PDF with all transcripts
+- `coursera_transcripts_checkpoint.json` — resume state (safe to delete after completion)
+
+## Migrating from v1.0 (direct script usage)
+
+Old:
+```bash
+python coursera_transcript_scraper.py
+# prompted for URL, always used Chrome
+```
+
+New (equivalent):
+```bash
+coursera-scraper scrape "https://www.coursera.org/learn/your-course"
+```
+
+Direct script execution still works unchanged for backwards compatibility:
 ```bash
 python coursera_transcript_scraper.py
 ```
 
-The script will prompt you for the URL of the course you want to scrape (e.g., `https://www.coursera.org/learn/machine-learning`).
+## Troubleshooting
 
-## Login
+**`coursera-scraper: command not found`** — run `pip install -e .` in the project root.
 
-The script will open a browser window and navigate to the Coursera login page. You will need to manually log in using your credentials. This ensures a reliable login process, especially when dealing with 2FA, CAPTCHAs, or other security checks.
+**Browser not detected** — run `coursera-scraper browsers` to see what's found. Install Chrome or run with `--browser` pointing to an installed browser.
 
-After you have successfully logged in, return to the terminal and press ENTER. The scraper will then automatically continue and handle everything else.
-### How it works
-
-1. **Login**: The script opens a browser for you to manually log into your Coursera account.
-2. **Navigation**: It automatically navigates through the course modules to collect all lecture links.
-3. **Scraping**: It visits each lecture page and extracts the transcript text.
-4. **PDF Generation**: It compiles all extracted transcripts into a formatted PDF file (default: `coursera_transcripts.pdf`).
-
-## Supported Content Types
-
-- Video lectures transcripts
-- Reading materials
-- Ungraded Labs
-
-### Resuming Progress
-
-The script saves a checkpoint file (`coursera_transcripts_checkpoint.json`) after scraping each lecture. If the script is interrupted, running it again for the same course will automatically resume from the last saved checkpoint, skipping already scraped lectures.
-
-
-## Output
-
-- `coursera_transcripts.pdf`: The final compiled PDF containing all scraped transcripts.
-- `coursera_transcripts_checkpoint.json`: A temporary JSON file used for resuming progress.
+**Session expired mid-scrape** — the checkpoint saves after each lecture. Re-run the same command to resume.
 
 ## Disclaimer
 
-This script is for personal use and educational purposes only. Please respect Coursera's terms of service and content copyrights.
-
-This tool is designed to help learners access transcripts for note-taking and revision, not for content redistribution.
+For personal use and educational purposes only. Respect Coursera's terms of service and content copyrights. Not for redistribution.
