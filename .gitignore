@@ -18,5 +18,5 @@ debug
 
 .claude
 .cache
-.coursera_scraper.egg-info
+coursera_scraper.egg-info/*.txt
 .serena

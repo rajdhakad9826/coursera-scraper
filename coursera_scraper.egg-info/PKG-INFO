@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: coursera-scraper
+Version: 1.1.0
+Summary: Scrape Coursera course transcripts and compile them into a PDF
+Requires-Python: >=3.10
+Requires-Dist: selenium>=4.6.0
+Requires-Dist: reportlab

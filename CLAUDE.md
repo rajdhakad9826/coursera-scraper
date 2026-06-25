@@ -37,7 +37,7 @@ Five modules, clean separation:
 | `browser_manager.py` | `BrowserManager` + `Browser` enum. Detects installed browsers, creates Selenium `WebDriver` with anti-bot flags. |
 | `session_manager.py` | Persists login state. Chrome/Edge: `--user-data-dir` profile. Firefox: cookie JSON. Stored in `~/.coursera-scraper/profiles/<browser>/`. |
 | `transcript_extractor.py` | 7-level cascade extractor (fastest → slowest). Each level is an `AbstractExtractor` subclass. Falls through to next on failure. |
-| `coursera_transcript_scraper.py` | Course navigation (week/module links → lecture URLs), "reading" title filter, checkpoint/resume, PDF generation via ReportLab. |
+| `coursera_transcript_scraper.py` | Course navigation (week/module links → lecture URLs), "reading"/"practice lab" title filter, checkpoint/resume, PDF generation via ReportLab. |
 
 ### Transcript extraction cascade (transcript_extractor.py)
 
@@ -53,7 +53,7 @@ Transcripts are cached to `.cache/<md5_of_url>.txt` — delete to force re-fetch
 
 ### Link collection and filtering (coursera_transcript_scraper.py)
 
-`collect_module_links()` scrapes week/module navigation, then lecture URLs. Items whose title matches `\breading\b` (case-insensitive) are skipped at collection time, before any extraction is attempted.
+`collect_module_links()` scrapes week/module navigation, then lecture URLs. Items whose title matches `\breading\b` or `\bpractice\s+lab\b` (case-insensitive) are skipped at collection time, before any extraction is attempted.
 
 Checkpoint state (`coursera_transcripts_checkpoint.json`) persists after each lecture so interrupted runs resume without re-scraping.
 
