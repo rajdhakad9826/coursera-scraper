@@ -119,6 +119,49 @@ After each lecture, progress is saved to `coursera_transcripts_checkpoint.json`.
 - `coursera_transcripts.pdf` — formatted PDF with all transcripts
 - `coursera_transcripts_checkpoint.json` — resume state (safe to delete after completion)
 
+## Export
+
+After scraping, convert the checkpoint into structured transcript files without re-scraping:
+
+```bash
+# default: reads coursera_transcripts_checkpoint.json, writes to exports/
+./export.sh
+
+# custom checkpoint path
+./export.sh path/to/checkpoint.json
+
+# custom checkpoint + output directory
+./export.sh path/to/checkpoint.json my-output-dir
+```
+
+### Output structure
+
+```
+exports/
+└── <course-slug>/
+    ├── transcript.txt      ← all lectures merged, plain text
+    ├── transcript.md       ← all lectures merged, markdown with headings
+    ├── metadata.json       ← index of all lectures with filenames
+    └── transcripts/
+        ├── 001-introduction.txt
+        ├── 001-introduction.md
+        ├── 002-week-1-overview.txt
+        ├── 002-week-1-overview.md
+        └── ...
+```
+
+### Export is idempotent
+
+Running `./export.sh` multiple times overwrites the output files. The checkpoint JSON is never modified.
+
+### Common errors
+
+**`checkpoint not found`** — the scraper hasn't run yet, or the checkpoint is in a different directory. Pass the path explicitly: `./export.sh path/to/coursera_transcripts_checkpoint.json`
+
+**`checkpoint is not valid JSON`** — the checkpoint file is corrupted or truncated. Re-run the scraper to regenerate it.
+
+**`output directory is not writable`** — check permissions on the output directory.
+
 ## Migrating from v1.0 (direct script usage)
 
 Old:

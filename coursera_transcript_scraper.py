@@ -212,7 +212,7 @@ def _collect_links_on_page(driver: webdriver.Chrome, seen_urls: set, module_labe
                 if not label:
                     label = "Untitled"
 
-                if re.search(r"\breading\b", label, re.IGNORECASE):
+                if re.search(r"\breading\b|\bpractice\s+lab\b", label, re.IGNORECASE):
                     continue
 
                 seen_urls.add(href)
@@ -299,7 +299,7 @@ def get_all_lecture_links(driver: webdriver.Chrome, course_url: str) -> list[dic
             href = a.get_attribute("href") or ""
             if re.search(r"/learn/[^/]+/(lecture|item|supplement)/", href) and href not in seen_urls:
                 title = a.text.strip() or "Lecture"
-                if re.search(r"\breading\b", title, re.IGNORECASE):
+                if re.search(r"\breading\b|\bpractice\s+lab\b", title, re.IGNORECASE):
                     continue
                 seen_urls.add(href)
                 lectures.append({

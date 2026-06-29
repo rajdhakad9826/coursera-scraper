@@ -16,4 +16,4 @@ dependencies = [
 coursera-scraper = "cli:main"
 
 [tool.setuptools]
-py-modules = ["cli", "browser_manager", "session_manager", "transcript_extractor", "coursera_transcript_scraper"]
+py-modules = ["cli", "browser_manager", "session_manager", "transcript_extractor", "coursera_transcript_scraper", "export"]
