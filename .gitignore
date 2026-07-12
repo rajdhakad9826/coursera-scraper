@@ -18,5 +18,33 @@ debug
 
 .claude
 .cache
-.coursera_scraper.egg-info
 .serena
+
+# export outputs and scraped course directories
+exports/
+introduction-to-data-analytics-course/
+
+# python
+*.py[cod]
+*.pyo
+
+# virtual env
+.venv/
+venv/
+
+# pytest
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+
+# ruff
+.ruff_cache/
+
+# vscode
+.vscode/
+
+*.html
+
+
+/coursera_scraper.egg-info
